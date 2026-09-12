@@ -1,0 +1,7 @@
+{
+  "name": "KIGO AI",
+  "description": "Production-grade futuristic AI assistant with general Q&A, math reasoning, code generation, Gemini vision & image generation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

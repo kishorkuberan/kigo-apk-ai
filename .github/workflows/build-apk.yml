@@ -1,0 +1,83 @@
+name: Build & Release APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build APK & Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Verify Active Java Version
+        run: java -version
+
+      - name: Set up Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Create Temporary Debug Keystore
+        run: |
+          mkdir -p ~/.android
+          keytool -genkey -v -keystore ~/.android/debug.keystore \
+            -alias androiddebugkey -storepass android -keypass android \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Build Debug APK
+        run: gradle :app:assembleDebug --stacktrace --no-daemon
+
+      - name: Upload Actions Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Create Release and Upload APK Asset
+        id: create_release
+        continue-on-error: true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0-build.${{ github.run_number }}.${{ github.run_attempt }}
+          name: KIGO AI Release v1.0.0 (Build ${{ github.run_number }}.${{ github.run_attempt }})
+          target_commitish: ${{ github.sha }}
+          make_latest: 'true'
+          files: app/build/outputs/apk/debug/app-debug.apk
+          token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate Workflow Summary
+        if: always()
+        run: |
+          echo "### 🚀 APK Build & Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **AGP Version:** 9.1.1 (confirmed from \`gradle/libs.versions.toml\`)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Java Version:** 17 (Eclipse Temurin)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Gradle Version:** 9.3.1" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Command:** \`gradle :app:assembleDebug --stacktrace --no-daemon\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **APK Path:** \`app/build/outputs/apk/debug/app-debug.apk\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Actions Artifact Name:** \`app-debug-apk\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release Tag:** \`v1.0.0-build.${{ github.run_number }}.${{ github.run_attempt }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release Asset File:** \`app-debug.apk\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.create_release.outcome }}" = "success" ]; then
+            echo "✅ **Release Publishing:** Succeeded! Direct APK download is available under Releases." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **Release Publishing:** ${{ steps.create_release.outcome }}. However, the Actions artifact \`app-debug-apk\` remains safely preserved and downloadable." >> $GITHUB_STEP_SUMMARY
+          fi
